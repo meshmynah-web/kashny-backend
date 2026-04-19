@@ -283,15 +283,15 @@ exports.bulkDeleteSales = async (req, res) => {
 
         if (permanent) {
             // Delete associated items first (if cascade isn't robustly available) then sales
-            await client.query("DELETE FROM sale_items WHERE sale_id IN ($1)", [ids]);
-            await client.query("DELETE FROM sales WHERE id IN ($1)", [ids]);
+            await client.query("DELETE FROM sale_items WHERE sale_id = ANY($1::int[])", [ids]);
+            await client.query("DELETE FROM sales WHERE id = ANY($1::int[])", [ids]);
 
             await client.query(
                 "INSERT INTO activity_logs (user_id, action) VALUES ($1, $2)",
                 [req.user.id, `Permanently deleted ${ids.length} sales`]
             );
         } else {
-            await client.query("UPDATE sales SET status = 'deleted' WHERE id IN ($1)", [ids]);
+            await client.query("UPDATE sales SET status = 'deleted' WHERE id = ANY($1::int[])", [ids]);
 
             await client.query(
                 "INSERT INTO activity_logs (user_id, action) VALUES ($1, $2)",
