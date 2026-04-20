@@ -1,4 +1,16 @@
 const { pool } = require('../config/db');
+const normalizeIds = (ids) => {
+    if (!ids) return [];
+
+    if (Array.isArray(ids)) {
+        return ids
+            .map(id => Number(id))
+            .filter(id => Number.isInteger(id));
+    }
+
+    const single = Number(ids);
+    return Number.isInteger(single) ? [single] : [];
+};
 
 exports.createSale = async (req, res) => {
     const { items, payment_method, amount_paid, customer_id, discount } = req.body;
@@ -231,11 +243,15 @@ exports.refundSale = async (req, res) => {
 };
 // Soft delete sale (admin only)
 exports.deleteSale = async (req, res) => {
-    const { id } = req.params;
+    const id = Number(req.params.id);
     const role = req.user.role.toLowerCase();
 
     if (role !== 'admin') {
         return res.status(403).json({ error: "Only admins can delete sales" });
+    }
+
+    if (!Number.isInteger(id)) {
+        return res.status(400).json({ error: "Invalid sale ID" });
     }
 
     const client = await pool.connect();
@@ -243,10 +259,19 @@ exports.deleteSale = async (req, res) => {
     try {
         await client.query('BEGIN');
 
-        const { rows: sale } = await client.query("SELECT status FROM sales WHERE id = $1", [id]);
-        if (sale.length === 0) throw new Error("Sale not found");
+        const { rows } = await client.query(
+            "SELECT id FROM sales WHERE id = $1",
+            [id]
+        );
 
-        await client.query("UPDATE sales SET status = 'deleted' WHERE id = $1", [id]);
+        if (rows.length === 0) {
+            throw new Error("Sale not found");
+        }
+
+        await client.query(
+            "UPDATE sales SET status = 'deleted' WHERE id = $1",
+            [id]
+        );
 
         await client.query(
             "INSERT INTO activity_logs (user_id, action) VALUES ($1, $2)",
@@ -254,14 +279,16 @@ exports.deleteSale = async (req, res) => {
         );
 
         await client.query('COMMIT');
+
         res.json({ message: "Sale deleted successfully" });
 
     } catch (err) {
         await client.query('ROLLBACK');
         console.error("Delete Sale Error:", err);
         res.status(400).json({ error: err.message || "Failed to delete sale" });
+
     } finally {
-        if (client) if (client) client.release();
+        client.release();
     }
 };
 
@@ -272,8 +299,11 @@ exports.bulkDeleteSales = async (req, res) => {
     if (role !== 'admin') {
         return res.status(403).json({ error: "Only admins can perform this action" });
     }
-    if (!ids || !ids.length) {
-        return res.status(400).json({ error: "No sales selected" });
+
+    const cleanIds = normalizeIds(ids);
+
+    if (!cleanIds.length) {
+        return res.status(400).json({ error: "Invalid or empty sales selection" });
     }
 
     const client = await pool.connect();
@@ -282,30 +312,46 @@ exports.bulkDeleteSales = async (req, res) => {
         await client.query('BEGIN');
 
         if (permanent) {
-            // Delete associated items first (if cascade isn't robustly available) then sales
-            await client.query("DELETE FROM sale_items WHERE sale_id = ANY($1::int[])", [ids]);
-            await client.query("DELETE FROM sales WHERE id = ANY($1::int[])", [ids]);
-
             await client.query(
-                "INSERT INTO activity_logs (user_id, action) VALUES ($1, $2)",
-                [req.user.id, `Permanently deleted ${ids.length} sales`]
+                "DELETE FROM sale_items WHERE sale_id = ANY($1::int[])",
+                [cleanIds]
             );
-        } else {
-            await client.query("UPDATE sales SET status = 'deleted' WHERE id = ANY($1::int[])", [ids]);
+
+            await client.query(
+                "DELETE FROM sales WHERE id = ANY($1::int[])",
+                [cleanIds]
+            );
 
             await client.query(
                 "INSERT INTO activity_logs (user_id, action) VALUES ($1, $2)",
-                [req.user.id, `Temporarily deleted ${ids.length} sales`]
+                [req.user.id, `Permanently deleted ${cleanIds.length} sales`]
+            );
+
+        } else {
+            await client.query(
+                "UPDATE sales SET status = 'deleted' WHERE id = ANY($1::int[])",
+                [cleanIds]
+            );
+
+            await client.query(
+                "INSERT INTO activity_logs (user_id, action) VALUES ($1, $2)",
+                [req.user.id, `Temporarily deleted ${cleanIds.length} sales`]
             );
         }
 
         await client.query('COMMIT');
-        res.json({ message: "Sales deleted successfully" });
+
+        res.json({
+            message: "Sales deleted successfully",
+            count: cleanIds.length
+        });
+
     } catch (err) {
         await client.query('ROLLBACK');
         console.error("Bulk Delete Error:", err);
         res.status(400).json({ error: err.message || "Failed to delete sales" });
+
     } finally {
-        if (client) if (client) client.release();
+        client.release();
     }
 };
