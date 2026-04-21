@@ -3,7 +3,7 @@ const { pool } = require('../config/db');
 exports.getCustomers = async (req, res) => {
     try {
         const { rows: customers } = await pool.query(
-            'SELECT 
+            `SELECT 
   id,
   customer_name AS name,
   phone,
@@ -11,7 +11,7 @@ exports.getCustomers = async (req, res) => {
   loyalty_points,
   total_spent,
   total_visits
-FROM customers ORDER BY id DESC'
+FROM customers ORDER BY id DESC`
         );
         res.json(customers);
     } catch (err) {
