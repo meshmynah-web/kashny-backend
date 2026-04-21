@@ -3,7 +3,7 @@ const { pool } = require('../config/db');
 exports.getCustomers = async (req, res) => {
     try {
         const { rows: customers } = await pool.query(
-            'SELECT * FROM customers ORDER BY id DESC'
+            'SELECT id, customer_name AS name, phone, email, loyalty_points FROM customers ORDER BY id DESC'
         );
         res.json(customers);
     } catch (err) {
