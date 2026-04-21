@@ -109,7 +109,7 @@ exports.createSale = async (req, res) => {
                 const { rows: cust } = await pool.query("SELECT total_visits FROM customers WHERE id = $1", [customer_id]);
                 if (cust.length > 0 && cust[0].total_visits % 5 === 0) {
                     await pool.query(
-                        "UPDATE customers SET loyalty_points = COALESCE(loyalty_points,0) + 2 WHERE id = $1",
+                        "UPDATE customers SET loyalty_points = COALESCE(loyalty_points,0) + 10 WHERE id = $1",
                         [customer_id]
                     );
                 }
