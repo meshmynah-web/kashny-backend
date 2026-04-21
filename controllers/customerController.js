@@ -3,7 +3,7 @@ const { pool } = require('../config/db');
 exports.getCustomers = async (req, res) => {
     try {
         const { rows: customers } = await pool.query(
-            'SELECT * FROM customers ORDER BY created_at DESC'
+            'SELECT * FROM customers ORDER BY id DESC'
         );
         res.json(customers);
     } catch (err) {
@@ -30,12 +30,12 @@ exports.createCustomer = async (req, res) => {
         }
 
         await pool.query(
-            'INSERT INTO customers (name, phone, email, loyalty_points) VALUES ($1, $2, $3, $4)',
+            'INSERT INTO customers (customer_name, phone, email, loyalty_points) VALUES ($1, $2, $3, $4)',
             [
                 name,
                 phone,
                 email || null,
-                Number(loyalty_points) || 0 // ✅ FIXED
+                Number(loyalty_points) || 0
             ]
         );
 
@@ -56,12 +56,12 @@ exports.updateCustomer = async (req, res) => {
         }
 
         await pool.query(
-            'UPDATE customers SET name = $1, phone = $2, email = $3, loyalty_points = $4 WHERE id = $5',
+            'UPDATE customers SET customer_name = $1, phone = $2, email = $3, loyalty_points = $4 WHERE id = $5',
             [
                 name,
                 phone,
                 email || null,
-                Number(loyalty_points) || 0, // ✅ FIXED
+                Number(loyalty_points) || 0,
                 req.params.id
             ]
         );
@@ -84,7 +84,6 @@ exports.deleteCustomer = async (req, res) => {
         res.json({ message: "Customer deleted successfully" });
 
     } catch (err) {
-        // ✅ FIXED FOR POSTGRES
         if (err.code === '23503') {
             return res.status(400).json({ error: "Cannot delete customer with past sales" });
         }
