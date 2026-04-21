@@ -2,7 +2,9 @@ const { pool } = require('../config/db');
 
 exports.getCustomers = async (req, res) => {
     try {
-        const { rows: customers } = await pool.query('SELECT * FROM customers ORDER BY created_at DESC');
+        const { rows: customers } = await pool.query(
+            'SELECT * FROM customers ORDER BY created_at DESC'
+        );
         res.json(customers);
     } catch (err) {
         console.error(err);
@@ -13,41 +15,81 @@ exports.getCustomers = async (req, res) => {
 exports.createCustomer = async (req, res) => {
     try {
         const { name, phone, email, loyalty_points } = req.body;
-        if (!name || !phone) return res.status(400).json({ error: "Name and phone are required" });
 
-        const { rows: existing } = await pool.query('SELECT * FROM customers WHERE phone = $1', [phone]);
-        if (existing.length > 0) return res.status(400).json({ error: "Customer with this phone already exists" });
+        if (!name || !phone) {
+            return res.status(400).json({ error: "Name and phone are required" });
+        }
 
-        await pool.query('INSERT INTO customers (name, phone, email, loyalty_points) VALUES ($1, $2, $3, $4)', [name, phone, email || null, loyalty_points || 0]);
+        const { rows: existing } = await pool.query(
+            'SELECT id FROM customers WHERE phone = $1',
+            [phone]
+        );
+
+        if (existing.length > 0) {
+            return res.status(400).json({ error: "Customer with this phone already exists" });
+        }
+
+        await pool.query(
+            'INSERT INTO customers (name, phone, email, loyalty_points) VALUES ($1, $2, $3, $4)',
+            [
+                name,
+                phone,
+                email || null,
+                Number(loyalty_points) || 0 // ✅ FIXED
+            ]
+        );
+
         res.status(201).json({ message: "Customer created successfully" });
+
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Server error" });
+        console.error("Create Customer Error:", err);
+        res.status(500).json({ error: err.message || "Server error" });
     }
 };
 
 exports.updateCustomer = async (req, res) => {
     try {
         const { name, phone, email, loyalty_points } = req.body;
-        if (!name || !phone) return res.status(400).json({ error: "Name and phone are required" });
 
-        await pool.query('UPDATE customers SET name = $1, phone = $2, email = $3, loyalty_points = $4 WHERE id = $5',
-            [name, phone, email || null, loyalty_points || 0, req.params.id]);
+        if (!name || !phone) {
+            return res.status(400).json({ error: "Name and phone are required" });
+        }
+
+        await pool.query(
+            'UPDATE customers SET name = $1, phone = $2, email = $3, loyalty_points = $4 WHERE id = $5',
+            [
+                name,
+                phone,
+                email || null,
+                Number(loyalty_points) || 0, // ✅ FIXED
+                req.params.id
+            ]
+        );
+
         res.json({ message: "Customer updated successfully" });
+
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: "Server error" });
+        console.error("Update Customer Error:", err);
+        res.status(500).json({ error: err.message || "Server error" });
     }
 };
 
 exports.deleteCustomer = async (req, res) => {
     try {
-        await pool.query('DELETE FROM customers WHERE id = $1', [req.params.id]);
+        await pool.query(
+            'DELETE FROM customers WHERE id = $1',
+            [req.params.id]
+        );
+
         res.json({ message: "Customer deleted successfully" });
+
     } catch (err) {
-        if (err.code === 'ER_ROW_IS_REFERENCED_2') {
+        // ✅ FIXED FOR POSTGRES
+        if (err.code === '23503') {
             return res.status(400).json({ error: "Cannot delete customer with past sales" });
         }
-        res.status(500).json({ error: "Server error" });
+
+        console.error("Delete Customer Error:", err);
+        res.status(500).json({ error: err.message || "Server error" });
     }
 };
